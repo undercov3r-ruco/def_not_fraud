@@ -339,7 +339,7 @@ def run(api_key: str, speed_factor: float = 1.0):
             scaled = pause_secs * speed_factor
 
             if pause_label != "typing":
-                logger.info(f" ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)")
+                logger.warning(f" ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)")
 
             time.sleep(scaled)
 
