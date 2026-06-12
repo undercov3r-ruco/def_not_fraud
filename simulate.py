@@ -210,7 +210,7 @@ class SessionState:
         self.heartbeats_sent          = 0
         self.session_start            = time.time()
 
-    def current_file(self) -> str"
+    def current_file(self) -> str:
         return self.cursor.filepath
 
     def switch_file(self):
