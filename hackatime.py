@@ -265,12 +265,12 @@ if __name__ == "__main__":
         "cursorpos":        10,
     }
 
-    logger.info("=== Payload being sent ===")
-    logger.info(json.dumps(test_beat, indent=2))
-    logger.info("=== HTTP User-Agent header ===")
-    logger.info(client.user_agent)
-    logger.info("Sending...")
+    logger.warning("=== Payload being sent ===")
+    logger.warning(json.dumps(test_beat, indent=2))
+    logger.warning("=== HTTP User-Agent header ===")
+    logger.warning(client.user_agent)
+    logger.warning("Sending...")
 
     client._send([test_beat])
-    logger.info("Done! Check https://hackatime.hackclub.com — the new heartbeat")
-    logger.info("should show editor, OS, and machine correctly.")
+    logger.warning("Done! Check https://hackatime.hackclub.com — the new heartbeat")
+    logger.warning("should show editor, OS, and machine correctly.")
