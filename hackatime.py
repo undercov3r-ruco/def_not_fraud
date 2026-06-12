@@ -16,9 +16,20 @@ import os
 import time
 import threading
 import requests
+import logging
 from requests import Session
 from pathlib import Path
 from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Logging Configuration
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("hackatime_client")
 
 # ---------------------------------------------------------------------------
 # Language map
@@ -189,13 +200,13 @@ class HackatimeClient:
         try:
             resp = self._session.post(url, json=heartbeats, timeout=10)
             if resp.status_code in (200, 201, 202):
-                print(f"[Hackatime] ✓ {len(heartbeats)} heartbeat(s) sent")
+                logger.info(f"[Hackatime] ✓ {len(heartbeats)} heartbeat(s) sent")
                 return True
             else:
-                print(f"[Hackatime] ✗ HTTP {resp.status_code}: {resp.text[:300]}")
+                logger.error(f"[Hackatime] ✗ HTTP {resp.status_code}: {resp.text[:300]}")
                 return False
         except requests.exceptions.RequestException as e:
-            print(f"[Hackatime] ✗ Network error: {e}")
+            logger.error(f"[Hackatime] ✗ Network error: {e}")
             return False
 
     def _start_flush_timer(self, interval: int) -> None:
@@ -224,7 +235,7 @@ def load_api_key(config_path: Optional[str] = None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Quick test — prints the exact payload being sent so you can verify
+# Quick test — logs the exact payload being sent so you can verify
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
@@ -254,12 +265,12 @@ if __name__ == "__main__":
         "cursorpos":        10,
     }
 
-    print("=== Payload being sent ===")
-    print(json.dumps(test_beat, indent=2))
-    print(f"\n=== HTTP User-Agent header ===")
-    print(client.user_agent)
-    print("\nSending...")
+    logger.info("=== Payload being sent ===")
+    logger.info(json.dumps(test_beat, indent=2))
+    logger.info("=== HTTP User-Agent header ===")
+    logger.info(client.user_agent)
+    logger.info("Sending...")
 
     client._send([test_beat])
-    print("\nDone! Check https://hackatime.hackclub.com — the new heartbeat")
-    print("should show editor, OS, and machine correctly.")
+    logger.info("Done! Check https://hackatime.hackclub.com — the new heartbeat")
+    logger.info("should show editor, OS, and machine correctly.")
