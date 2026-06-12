@@ -22,18 +22,8 @@ import logging
 from hackatime import HackatimeClient, load_api_key
 
 # ---------------------------------------------------------------------------
-# Logging Configuration with Custom SUCCESS Type
+# Logging Configuration
 # ---------------------------------------------------------------------------
-# Define a custom SUCCESS level between INFO (20) and WARNING (30)
-SUCCESS_LEVEL_NUM = 15
-logging.addLevelName(SUCCESS_LEVEL_NUM, "SUCCESS")
-
-def success(self, message, *args, **kws):
-    if self.isEnabledFor(SUCCESS_LEVEL_NUM):
-        self._log(SUCCESS_LEVEL_NUM, message, args, **kws)
-
-logging.Logger.success = success
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -135,8 +125,8 @@ PAUSE_PROFILES = [
     ("think_short",  10,   25,  74),   # reading / figuring out next line
     ("think_medium", 45,   120,  20),   # googling / reading docs
     ("long_break",   180,  600,  4),   # lunch / meeting / phone call
-    ("ultra_break",  600,  1800, 1),   # end-of-day / overnight sim
-    ("ultra_pro_break",  1800,  14400, 1),
+    ("ultra_break",  600,  1800, 1),   # long break
+    ("ultra_pro_break",  1800,  14400, 1),   # end-of-day / overnight sim
 ]
 
 _pause_weights = [p[3] for p in PAUSE_PROFILES]
@@ -278,17 +268,16 @@ def run(api_key: str, speed_factor: float = 1.0):
     state = SessionState()
     tick  = 0
 
-    # Initial session configuration output — TYPE: warning
-    logger.warning("=================================================================")
-    logger.warning("  Hackatime Simulator")
-    logger.warning(f"  Project  : {PROJECT_NAME}")
-    logger.warning(f"  Repo     : {GITHUB_REPO}")
-    logger.warning(f"  Editor   : {EDITOR_NAME} {EDITOR_VERSION}")
-    logger.warning(f"  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}")
-    logger.warning(f"  Branch   : {BRANCH}")
-    logger.warning(f"  UA       : {USER_AGENT}")
-    logger.warning(f"  Speed    : {1/speed_factor:.0f}x real-time")
-    logger.warning("=================================================================")
+    logger.info("=================================================================")
+    logger.info("  Hackatime Simulator")
+    logger.info(f"  Project  : {PROJECT_NAME}")
+    logger.info(f"  Repo     : {GITHUB_REPO}")
+    logger.info(f"  Editor   : {EDITOR_NAME} {EDITOR_VERSION}")
+    logger.info(f"  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}")
+    logger.info(f"  Branch   : {BRANCH}")
+    logger.info(f"  UA       : {USER_AGENT}")
+    logger.info(f"  Speed    : {1/speed_factor:.0f}x real-time")
+    logger.info("=================================================================")
 
     try:
         while True:
@@ -336,8 +325,7 @@ def run(api_key: str, speed_factor: float = 1.0):
             )
             state.heartbeats_sent += 1
 
-            # Heartbeat ticker — TYPE: success
-            logger.success(
+            logger.info(
                 f"[{state.elapsed()}] tick={tick:>5}  {action_label:<12} "
                 f"{file_rel:<38}  line={state.cursor.line:<5} col={state.cursor.col:<4} "
                 f"{'💾' if is_write else '  '}"
@@ -350,9 +338,8 @@ def run(api_key: str, speed_factor: float = 1.0):
             pause_label, pause_secs = pick_pause()
             scaled = pause_secs * speed_factor
 
-            # Break notifications — TYPE: warning
             if pause_label != "typing":
-                logger.warning(f" ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)")
+                logger.info(f" ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)")
 
             time.sleep(scaled)
 
