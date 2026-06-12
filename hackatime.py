@@ -22,8 +22,18 @@ from pathlib import Path
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Logging Configuration
+# Logging Configuration with Custom SUCCESS Type
 # ---------------------------------------------------------------------------
+# Define a custom SUCCESS level between INFO (20) and WARNING (30)
+SUCCESS_LEVEL_NUM = 25
+logging.addLevelName(SUCCESS_LEVEL_NUM, "SUCCESS")
+
+def success(self, message, *args, **kws):
+    if self.isEnabledFor(SUCCESS_LEVEL_NUM):
+        self._log(SUCCESS_LEVEL_NUM, message, args, **kws)
+
+logging.Logger.success = success
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -200,7 +210,8 @@ class HackatimeClient:
         try:
             resp = self._session.post(url, json=heartbeats, timeout=10)
             if resp.status_code in (200, 201, 202):
-                logger.info(f"[Hackatime] ✓ {len(heartbeats)} heartbeat(s) sent")
+                # Heartbeat successfully sent — TYPE: success
+                logger.success(f"[Hackatime] ✓ {len(heartbeats)} heartbeat(s) sent")
                 return True
             else:
                 logger.error(f"[Hackatime] ✗ HTTP {resp.status_code}: {resp.text[:300]}")
@@ -265,6 +276,7 @@ if __name__ == "__main__":
         "cursorpos":        10,
     }
 
+    # Initial verification output — TYPE: warning
     logger.warning("=== Payload being sent ===")
     logger.warning(json.dumps(test_beat, indent=2))
     logger.warning("=== HTTP User-Agent header ===")
