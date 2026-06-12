@@ -18,7 +18,18 @@ Usage:
 import random
 import time
 import sys
+import logging
 from hackatime import HackatimeClient, load_api_key
+
+# ---------------------------------------------------------------------------
+# Logging Configuration
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger("hackatime_sim")
 
 # ---------------------------------------------------------------------------
 # Identity — copied exactly from your real heartbeat
@@ -110,11 +121,11 @@ def full_path(relative: str) -> str:
 # ---------------------------------------------------------------------------
 
 PAUSE_PROFILES = [
-    ("typing",       2,    8,    900),   # normal keystroke gap
-    ("think_short",  10,   25,   77),   # reading / figuring out next line
-    ("think_medium", 45,   120,   20),   # googling / reading docs
-    ("long_break",   180,  600,   2),   # lunch / meeting / phone call
-    ("ultra_break",  600,  1800,  1),   # end-of-day / overnight sim
+    ("typing",       2,    8,   900),   # normal keystroke gap
+    ("think_short",  10,   25,  77),   # reading / figuring out next line
+    ("think_medium", 45,   120,  20),   # googling / reading docs
+    ("long_break",   180,  600,  2),   # lunch / meeting / phone call
+    ("ultra_break",  600,  1800, 1),   # end-of-day / overnight sim
 ]
 
 _pause_weights = [p[3] for p in PAUSE_PROFILES]
@@ -200,7 +211,7 @@ class SessionState:
         if choices:
             new_file = random.choice(choices)
             self.cursor = CursorState(new_file)
-            print(f"  ↳ switched to  {new_file}")
+            logger.info(f" ↳ switched to  {new_file}")
 
     def create_file(self) -> str | None:
         available = [f for f in self.new_file_pool if f not in self.active_files]
@@ -210,7 +221,7 @@ class SessionState:
         self.active_files.append(new_file)
         self.cursor = CursorState(new_file)
         self.cursor.line = 1
-        print(f"  ✚ created       {new_file}")
+        logger.info(f" ✚ created       {new_file}")
         return new_file
 
     def delete_file(self) -> str | None:
@@ -223,7 +234,7 @@ class SessionState:
         victim = random.choice(candidates)
         self.deleted.add(victim)
         self.active_files.remove(victim)
-        print(f"  ✖ deleted       {victim}")
+        logger.info(f" ✖ deleted       {victim}")
         return victim
 
     def elapsed(self) -> str:
@@ -256,16 +267,16 @@ def run(api_key: str, speed_factor: float = 1.0):
     state = SessionState()
     tick  = 0
 
-    print(f"\n{'='*65}")
-    print(f"  Hackatime Simulator")
-    print(f"  Project  : {PROJECT_NAME}")
-    print(f"  Repo     : {GITHUB_REPO}")
-    print(f"  Editor   : {EDITOR_NAME} {EDITOR_VERSION}")
-    print(f"  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}")
-    print(f"  Branch   : {BRANCH}")
-    print(f"  UA       : {USER_AGENT}")
-    print(f"  Speed    : {1/speed_factor:.0f}x real-time")
-    print(f"{'='*65}\n")
+    logger.info("=================================================================")
+    logger.info("  Hackatime Simulator")
+    logger.info(f"  Project  : {PROJECT_NAME}")
+    logger.info(f"  Repo     : {GITHUB_REPO}")
+    logger.info(f"  Editor   : {EDITOR_NAME} {EDITOR_VERSION}")
+    logger.info(f"  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}")
+    logger.info(f"  Branch   : {BRANCH}")
+    logger.info(f"  UA       : {USER_AGENT}")
+    logger.info(f"  Speed    : {1/speed_factor:.0f}x real-time")
+    logger.info("=================================================================")
 
     try:
         while True:
@@ -313,7 +324,7 @@ def run(api_key: str, speed_factor: float = 1.0):
             )
             state.heartbeats_sent += 1
 
-            print(
+            logger.info(
                 f"[{state.elapsed()}] tick={tick:>5}  {action_label:<12} "
                 f"{file_rel:<38}  line={state.cursor.line:<5} col={state.cursor.col:<4} "
                 f"{'💾' if is_write else '  '}"
@@ -327,15 +338,15 @@ def run(api_key: str, speed_factor: float = 1.0):
             scaled = pause_secs * speed_factor
 
             if pause_label != "typing":
-                print(f"\n  ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)\n")
+                logger.info(f" ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)")
 
             time.sleep(scaled)
 
     except KeyboardInterrupt:
-        print(f"\n\nStopped after {tick} ticks. Flushing...")
+        logger.warning(f"Stopped after {tick} ticks. Flushing...")
         client.flush()
-        print(f"Total heartbeats sent: {state.heartbeats_sent}")
-        print("Done ✓")
+        logger.info(f"Total heartbeats sent: {state.heartbeats_sent}")
+        logger.info("Done ✓")
 
 # ---------------------------------------------------------------------------
 # Entry point
