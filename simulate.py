@@ -268,16 +268,16 @@ def run(api_key: str, speed_factor: float = 1.0):
     state = SessionState()
     tick  = 0
 
-    logger.info("=================================================================")
-    logger.info("  Hackatime Simulator")
-    logger.info(f"  Project  : {PROJECT_NAME}")
-    logger.info(f"  Repo     : {GITHUB_REPO}")
-    logger.info(f"  Editor   : {EDITOR_NAME} {EDITOR_VERSION}")
-    logger.info(f"  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}")
-    logger.info(f"  Branch   : {BRANCH}")
-    logger.info(f"  UA       : {USER_AGENT}")
-    logger.info(f"  Speed    : {1/speed_factor:.0f}x real-time")
-    logger.info("=================================================================")
+    logger.warning("=================================================================")
+    logger.warning("  Hackatime Simulator")
+    logger.warning(f"  Project  : {PROJECT_NAME}")
+    logger.warning(f"  Repo     : {GITHUB_REPO}")
+    logger.warning(f"  Editor   : {EDITOR_NAME} {EDITOR_VERSION}")
+    logger.warning(f"  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}")
+    logger.warning(f"  Branch   : {BRANCH}")
+    logger.warning(f"  UA       : {USER_AGENT}")
+    logger.warning(f"  Speed    : {1/speed_factor:.0f}x real-time")
+    logger.warning("=================================================================")
 
     try:
         while True:
