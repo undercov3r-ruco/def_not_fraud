@@ -22,7 +22,7 @@ import logging
 from hackatime import HackatimeClient, load_api_key
 
 # ---------------------------------------------------------------------------
-# Logging Configuration
+# Logging Configuration with ANSI Colors
 # ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +30,11 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger("hackatime_sim")
+
+# ANSI Color Codes
+COLOR_GREEN = "\033[92m"
+COLOR_YELLOW = "\033[93m"
+COLOR_RESET = "\033[0m"
 
 # ---------------------------------------------------------------------------
 # Identity — copied exactly from your real heartbeat
@@ -267,16 +272,17 @@ def run(api_key: str, speed_factor: float = 1.0):
     state = SessionState()
     tick  = 0
 
-    logger.warning("=================================================================")
-    logger.warning("  Hackatime Simulator")
-    logger.warning(f"  Project  : {PROJECT_NAME}")
-    logger.warning(f"  Repo     : {GITHUB_REPO}")
-    logger.warning(f"  Editor   : {EDITOR_NAME} {EDITOR_VERSION}")
-    logger.warning(f"  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}")
-    logger.warning(f"  Branch   : {BRANCH}")
-    logger.warning(f"  UA       : {USER_AGENT}")
-    logger.warning(f"  Speed    : {1/speed_factor:.0f}x real-time")
-    logger.warning("=================================================================")
+    # Initial messages strictly wrapped in Yellow
+    logger.info(f"{COLOR_YELLOW}================================================================={COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  Hackatime Simulator{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  Project  : {PROJECT_NAME}{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  Repo     : {GITHUB_REPO}{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  Editor   : {EDITOR_NAME} {EDITOR_VERSION}{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  Machine  : {MACHINE}  |  OS: {OPERATING_SYSTEM}{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  Branch   : {BRANCH}{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  UA       : {USER_AGENT}{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}  Speed    : {1/speed_factor:.0f}x real-time{COLOR_RESET}")
+    logger.info(f"{COLOR_YELLOW}================================================================={COLOR_RESET}")
 
     try:
         while True:
@@ -324,10 +330,11 @@ def run(api_key: str, speed_factor: float = 1.0):
             )
             state.heartbeats_sent += 1
 
+            # Heartbeat tickers explicitly wrapped in Green
             logger.info(
-                f"[{state.elapsed()}] tick={tick:>5}  {action_label:<12} "
+                f"{COLOR_GREEN}[{state.elapsed()}] tick={tick:>5}  {action_label:<12} "
                 f"{file_rel:<38}  line={state.cursor.line:<5} col={state.cursor.col:<4} "
-                f"{'💾' if is_write else '  '}"
+                f"{'💾' if is_write else '  '}{COLOR_RESET}"
             )
 
             if is_write or state.heartbeats_sent % 10 == 0:
@@ -337,15 +344,16 @@ def run(api_key: str, speed_factor: float = 1.0):
             pause_label, pause_secs = pick_pause()
             scaled = pause_secs * speed_factor
 
+            # Break messages explicitly wrapped in Yellow
             if pause_label != "typing":
-                logger.warning(f" ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)")
+                logger.info(f"{COLOR_YELLOW} ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep){COLOR_RESET}")
 
             time.sleep(scaled)
 
     except KeyboardInterrupt:
-        logger.warning(f"Stopped after {tick} ticks. Flushing...")
+        logger.warning("Stopped after %d ticks. Flushing...", tick)
         client.flush()
-        logger.info(f"Total heartbeats sent: {state.heartbeats_sent}")
+        logger.info("Total heartbeats sent: %d", state.heartbeats_sent)
         logger.info("Done ✓")
 
 # ---------------------------------------------------------------------------
