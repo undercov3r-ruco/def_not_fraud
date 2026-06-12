@@ -7,12 +7,6 @@ Mirrors your exact Hackatime heartbeat fingerprint:
   machine: rupnil-virtualbox
   branch: main
   dir:    /home/rupnil/Desktop/extremely-important-repo/
-
-Usage:
-    python3 simulate.py                   # 20x speed (default)
-    HACKATIME_API_KEY=xxx python3 simulate.py
-    python3 simulate.py 1.0               # real-time
-    python3 simulate.py 0.01              # 100x speed
 """
 
 import random
@@ -32,9 +26,8 @@ logging.basicConfig(
 logger = logging.getLogger("hackatime_sim")
 
 # ---------------------------------------------------------------------------
-# Identity — copied exactly from your real heartbeat
+# Identity
 # ---------------------------------------------------------------------------
-
 EDITOR_NAME      = "sublime"
 EDITOR_VERSION   = "4200"
 PLUGIN_NAME      = "sublime-wakatime"
@@ -46,8 +39,6 @@ MACHINE          = "ruco-pc"
 OPERATING_SYSTEM = "linux"
 BRANCH           = "main"
 
-# Builds the exact User-Agent your real client sends:
-# wakatime/v2.15.0 (linux-6.17.0-35-generic-unknown) go1.26.3 sublime/4200 sublime-wakatime/11.1.1
 USER_AGENT = (
     f"wakatime/{WAKATIME_VERSION} ({OS_STRING}) {LANGUAGE_RUNTIME} "
     f"{EDITOR_NAME}/{EDITOR_VERSION} {PLUGIN_NAME}/{PLUGIN_VERSION}"
@@ -58,130 +49,120 @@ PROJECT_NAME = "waka_waka"
 GITHUB_REPO  = "https://github.com/undercov3r-ruco/waka_waka"
 
 # ---------------------------------------------------------------------------
-# File pool  (all under BASE_DIR, matching your real path style)
+# File pools
 # ---------------------------------------------------------------------------
-
 SEED_FILES = [
-    "source_code.py",
-    "main.py",
-    "core.py",
-    "utils.py",
-    "models.py",
-    "handlers.py",
-    "pipeline.py",
-    "config.py",
-    "constants.py",
-    "tests/test_core.py",
-    "tests/test_models.py",
-    "tests/test_pipeline.py",
-    "tests/conftest.py",
-    "scripts/setup.py",
-    "scripts/run.py",
-    "README.md",
-    "requirements.txt",
-    "requirements-dev.txt",
-    ".gitignore",
-    "pyproject.toml",
-    "docs/overview.md",
-    "docs/usage.md",
+    "source_code.py", "main.py", "core.py", "utils.py", "models.py",
+    "handlers.py", "pipeline.py", "config.py", "constants.py",
+    "tests/test_core.py", "tests/test_models.py", "tests/test_pipeline.py",
+    "tests/conftest.py", "scripts/setup.py", "scripts/run.py",
+    "README.md", "requirements.txt", "requirements-dev.txt",
+    ".gitignore", "pyproject.toml", "docs/overview.md", "docs/usage.md",
 ]
 
 NEW_FILE_POOL = [
-    "validators.py",
-    "serializers.py",
-    "exceptions.py",
-    "middleware.py",
-    "cache.py",
-    "scheduler.py",
-    "db.py",
-    "auth.py",
-    "tests/test_validators.py",
-    "tests/test_auth.py",
-    "tests/test_cache.py",
-    "scripts/migrate.py",
-    "scripts/seed.py",
-    "utils/helpers.py",
-    "utils/decorators.py",
-    "Makefile",
-    "docker/Dockerfile",
-    "docker/docker-compose.yml",
-    ".github/workflows/ci.yml",
-    ".github/workflows/release.yml",
-    "docs/api.md",
-    "docs/contributing.md",
-    "CHANGELOG.md",
+    "validators.py", "serializers.py", "exceptions.py", "middleware.py",
+    "cache.py", "scheduler.py", "db.py", "auth.py", "tests/test_validators.py",
+    "tests/test_auth.py", "tests/test_cache.py", "scripts/migrate.py",
+    "scripts/seed.py", "utils/helpers.py", "utils/decorators.py",
+    "Makefile", "docker/Dockerfile", "docker/docker-compose.yml",
+    ".github/workflows/ci.yml", ".github/workflows/release.yml",
+    "docs/api.md", "docs/contributing.md", "CHANGELOG.md",
 ]
 
 def full_path(relative: str) -> str:
-    """Turn a relative filename into an absolute path matching your real heartbeats."""
     return f"{BASE_DIR}/{relative}"
 
 # ---------------------------------------------------------------------------
-# Pause profiles  (label, min_s, max_s, weight)
+# Pause profiles & Cooldown Logic
 # ---------------------------------------------------------------------------
-
 PAUSE_PROFILES = [
-    ("typing",       2,    8,   900),   # normal keystroke gap
-    ("think_short",  10,   25,  74),   # reading / figuring out next line
-    ("think_medium", 45,   120,  20),   # googling / reading docs
-    ("long_break",   180,  600,  4),   # lunch / meeting / phone call
-    ("ultra_break",  600,  1800, 1),   # long break
-    ("ultra_pro_break",  1800,  14400, 1),   # end-of-day / overnight sim
+    {"label": "typing",           "min_s": 2,    "max_s": 8,     "base_weight": 900},
+    {"label": "think_short",      "min_s": 10,   "max_s": 25,    "base_weight": 74},
+    {"label": "think_medium",     "min_s": 45,   "max_s": 120,   "base_weight": 20},
+    {"label": "long_break",       "min_s": 180,  "max_s": 600,   "base_weight": 4},
+    {"label": "ultra_break",      "min_s": 600,  "max_s": 1800,  "base_weight": 1},
+    {"label": "ultra_pro_break",  "min_s": 1800, "max_s": 14400, "base_weight": 1},
 ]
 
-_pause_weights = [p[3] for p in PAUSE_PROFILES]
+# State tracking for cooldowns (in simulated seconds)
+ultra_break_cooldown_until = 0.0
+ultra_pro_break_cooldown_until = 0.0
 
-def pick_pause() -> tuple[str, float]:
-    profile = random.choices(PAUSE_PROFILES, weights=_pause_weights, k=1)[0]
-    label, lo, hi, _ = profile
-    return label, random.uniform(lo, hi)
+def pick_pause(simulated_elapsed_seconds: float) -> tuple[str, float]:
+    """Dynamically calculates pause profile weights based on ongoing cooldown targets."""
+    global ultra_break_cooldown_until, ultra_pro_break_cooldown_until
+    
+    weights = []
+    for profile in PAUSE_PROFILES:
+        weight = profile["base_weight"]
+        label = profile["label"]
+        
+        # Rule 1: If ultra break cooldown active, zero out ultra_break and ultra_pro_break
+        if label in ("ultra_break", "ultra_pro_break") and simulated_elapsed_seconds < ultra_break_cooldown_until:
+            weight = 0
+            
+        # Rule 2: If ultra pro break cooldown active, zero out ONLY ultra_pro_break
+        if label == "ultra_pro_break" and simulated_elapsed_seconds < ultra_pro_break_cooldown_until:
+            weight = 0
+            
+        weights.append(weight)
+
+    # Pick a profile based on modified dynamic weights
+    chosen_profile = random.choices(PAUSE_PROFILES, weights=weights, k=1)[0]
+    label = chosen_profile["label"]
+    pause_secs = random.uniform(chosen_profile["min_s"], chosen_profile["max_s"])
+    
+    # Calculate target time when break finishes to set cooldown start line
+    break_end_sim_time = simulated_elapsed_seconds + pause_secs
+
+    # Trigger cooldowns if a long break was rolled
+    if label == "ultra_break":
+        cooldown_duration = random.uniform(1 * 3600, 2 * 3600)  # 1-2 hours
+        ultra_break_cooldown_until = break_end_sim_time + cooldown_duration
+        logger.debug(f" [Cooldown] Ultra Break triggered. Locking Ultra/Ultra-Pro for next {cooldown_duration/3600:.2f} sim-hours.")
+        
+    elif label == "ultra_pro_break":
+        cooldown_duration = random.uniform(2 * 3600, 6 * 3600)  # 2-6 hours
+        ultra_pro_break_cooldown_until = break_end_sim_time + cooldown_duration
+        logger.debug(f" [Cooldown] Ultra Pro Break triggered. Locking Ultra-Pro for next {cooldown_duration/3600:.2f} sim-hours.")
+
+    return label, pause_secs
 
 # ---------------------------------------------------------------------------
-# Cursor state  — with realistic non-linear movement
+# Cursor state
 # ---------------------------------------------------------------------------
-
 class CursorState:
     def __init__(self, filepath: str):
         self.filepath    = filepath
         self.line        = random.randint(1, 80)
         self.col         = random.randint(1, 80)
         self.total_lines = random.randint(self.line + 10, 350)
-        # direction bias: +1 = scrolling down, -1 = scrolling up
         self._direction  = 1
         self._steps_in_direction = 0
 
     def move(self):
-        # Occasionally flip scroll direction (simulates reading up then down)
         self._steps_in_direction += 1
         if self._steps_in_direction > random.randint(3, 15):
             self._direction *= -1
             self._steps_in_direction = 0
 
-        # Base movement: 0–10 lines in current direction
         delta = random.randint(0, 10) * self._direction
-
-        # Random events (weighted):
         roll = random.random()
+        
         if roll < 0.06:
-            # Jump to a completely different part of the file (Ctrl+G / click)
             self.line = random.randint(1, max(1, self.total_lines))
             self._direction = random.choice([-1, 1])
         elif roll < 0.12:
-            # Small backtrack (fixing a typo a few lines up)
             delta = -random.randint(1, 8)
         elif roll < 0.18:
-            # Larger jump backward (re-reading earlier function)
             delta = -random.randint(10, 40)
         elif roll < 0.22:
-            # Larger jump forward (skipping boilerplate)
             delta = random.randint(15, 50)
-        else:
-            pass  # normal delta already set
 
         self.line = max(1, self.line + delta)
         self.col  = random.randint(1, 120)
 
-        # Occasionally add lines (new code being written)
         if random.random() < 0.25:
             self.total_lines += random.randint(0, 4)
 
@@ -191,7 +172,6 @@ class CursorState:
 # ---------------------------------------------------------------------------
 # Session state
 # ---------------------------------------------------------------------------
-
 class SessionState:
     def __init__(self):
         self.active_files: list[str]  = list(SEED_FILES)
@@ -199,16 +179,13 @@ class SessionState:
         self.deleted: set[str]        = set()
         self.cursor: CursorState      = CursorState(random.choice(self.active_files))
         self.heartbeats_sent          = 0
-        self.session_start            = time.time()
+        self.simulated_elapsed        = 0.0  # Tracked accumulated simulation runtime
 
     def current_file(self) -> str:
         return self.cursor.filepath
 
     def switch_file(self):
-        choices = [
-            f for f in self.active_files
-            if f not in self.deleted and f != self.cursor.filepath
-        ]
+        choices = [f for f in self.active_files if f not in self.deleted and f != self.cursor.filepath]
         if choices:
             new_file = random.choice(choices)
             self.cursor = CursorState(new_file)
@@ -226,10 +203,7 @@ class SessionState:
         return new_file
 
     def delete_file(self) -> str | None:
-        candidates = [
-            f for f in self.active_files
-            if f != self.cursor.filepath and f not in self.deleted
-        ]
+        candidates = [f for f in self.active_files if f != self.cursor.filepath and f not in self.deleted]
         if len(candidates) < 2:
             return None
         victim = random.choice(candidates)
@@ -238,19 +212,14 @@ class SessionState:
         logger.info(f" ✖ deleted       {victim}")
         return victim
 
-    def elapsed(self) -> str:
-        s = int(time.time() - self.session_start)
+    def elapsed_str(self) -> str:
+        s = int(self.simulated_elapsed)
         return f"{s//3600:02d}:{(s%3600)//60:02d}:{s%60:02d}"
 
 # ---------------------------------------------------------------------------
 # Main simulation loop
 # ---------------------------------------------------------------------------
-
 def run(api_key: str, speed_factor: float = 1.0):
-    """
-    speed_factor < 1.0  -> run faster  (0.05 = 20x, 0.01 = 100x)
-    speed_factor = 1.0  -> real-time
-    """
     client = HackatimeClient(
         api_key=api_key,
         editor_name=EDITOR_NAME,
@@ -262,7 +231,7 @@ def run(api_key: str, speed_factor: float = 1.0):
         operating_system=OPERATING_SYSTEM,
         language_runtime=LANGUAGE_RUNTIME,
         machine=MACHINE,
-        auto_flush_interval=0,  # manual flush for tight control
+        auto_flush_interval=0,
     )
 
     state = SessionState()
@@ -297,22 +266,18 @@ def run(api_key: str, speed_factor: float = 1.0):
                     file_abs = full_path(created)
                     is_write = True
                     action_label = "new-file"
-
             elif roll < 0.015:
                 state.delete_file()
                 action_label = "post-delete"
-
             elif roll < 0.07:
                 state.switch_file()
                 file_rel = state.current_file()
                 file_abs = full_path(file_rel)
                 action_label = "switch"
-
             elif roll < 0.22:
                 is_write = True
                 action_label = "save"
 
-            # Send heartbeat with all your real fields
             client.heartbeat(
                 file=file_abs,
                 project=PROJECT_NAME,
@@ -326,7 +291,7 @@ def run(api_key: str, speed_factor: float = 1.0):
             state.heartbeats_sent += 1
 
             logger.info(
-                f"[{state.elapsed()}] tick={tick:>5}  {action_label:<12} "
+                f"[{state.elapsed_str()}] tick={tick:>5}  {action_label:<12} "
                 f"{file_rel:<38}  line={state.cursor.line:<5} col={state.cursor.col:<4} "
                 f"{'💾' if is_write else '  '}"
             )
@@ -334,13 +299,15 @@ def run(api_key: str, speed_factor: float = 1.0):
             if is_write or state.heartbeats_sent % 10 == 0:
                 client.flush()
 
-            # Realistic pause
-            pause_label, pause_secs = pick_pause()
+            # Pass simulated elapsed tracker into pick_pause
+            pause_label, pause_secs = pick_pause(state.simulated_elapsed)
             scaled = pause_secs * speed_factor
 
             if pause_label != "typing":
                 logger.warning(f" ⏸  {pause_label}  ({pause_secs:.0f}s real -> {scaled:.1f}s sleep)")
 
+            # Advance simulated time tracker
+            state.simulated_elapsed += pause_secs
             time.sleep(scaled)
 
     except KeyboardInterrupt:
@@ -348,10 +315,6 @@ def run(api_key: str, speed_factor: float = 1.0):
         client.flush()
         logger.info(f"Total heartbeats sent: {state.heartbeats_sent}")
         logger.info("Done ✓")
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     api_key = load_api_key()
