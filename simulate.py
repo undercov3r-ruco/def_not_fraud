@@ -132,10 +132,11 @@ def full_path(relative: str) -> str:
 
 PAUSE_PROFILES = [
     ("typing",       2,    8,   900),   # normal keystroke gap
-    ("think_short",  10,   25,  77),   # reading / figuring out next line
+    ("think_short",  10,   25,  74),   # reading / figuring out next line
     ("think_medium", 45,   120,  20),   # googling / reading docs
-    ("long_break",   180,  600,  2),   # lunch / meeting / phone call
+    ("long_break",   180,  600,  4),   # lunch / meeting / phone call
     ("ultra_break",  600,  1800, 1),   # end-of-day / overnight sim
+    ("ultra_pro_break",  1800,  14400, 1),
 ]
 
 _pause_weights = [p[3] for p in PAUSE_PROFILES]
