@@ -25,7 +25,7 @@ from hackatime import HackatimeClient, load_api_key
 # Logging Configuration with Custom SUCCESS Type
 # ---------------------------------------------------------------------------
 # Define a custom SUCCESS level between INFO (20) and WARNING (30)
-SUCCESS_LEVEL_NUM = 25
+SUCCESS_LEVEL_NUM = 15
 logging.addLevelName(SUCCESS_LEVEL_NUM, "SUCCESS")
 
 def success(self, message, *args, **kws):
