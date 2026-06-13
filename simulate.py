@@ -44,31 +44,59 @@ USER_AGENT = (
     f"{EDITOR_NAME}/{EDITOR_VERSION} {PLUGIN_NAME}/{PLUGIN_VERSION}"
 )
 
-BASE_DIR     = "/home/ruco/Desktop/waka_waka"
-PROJECT_NAME = "waka_waka"
-GITHUB_REPO  = "https://github.com/undercov3r-ruco/waka_waka"
+BASE_DIR     = "/home/ruco/Desktop/RealAI"
+PROJECT_NAME = "RealAI"
+GITHUB_REPO  = "https://github.com/undercov3r-ruco/RealAI"
 
 # ---------------------------------------------------------------------------
 # File pools
 # ---------------------------------------------------------------------------
 SEED_FILES = [
-    "source_code.py", "main.py", "core.py", "utils.py", "models.py",
-    "handlers.py", "pipeline.py", "config.py", "constants.py",
-    "tests/test_core.py", "tests/test_models.py", "tests/test_pipeline.py",
-    "tests/conftest.py", "scripts/setup.py", "scripts/run.py",
-    "README.md", "requirements.txt", "requirements-dev.txt",
-    ".gitignore", "pyproject.toml", "docs/overview.md", "docs/usage.md",
+    "app.py", "realai.py", "core.py", "pipeline.py", "models.py",
+    "vector_store.py", "agent.py", "config.py", "constants.py",
+    "utils.py", "services/openai_service.py", "services/data_service.py",
+    "tests/test_agent.py", "tests/test_pipeline.py", "tests/test_models.py",
+    "tests/conftest.py", "scripts/train.py", "scripts/serve.py",
+    "README.md", "requirements.txt", "pyproject.toml",
+    "docs/overview.md", "docs/usage.md",
 ]
 
 NEW_FILE_POOL = [
-    "validators.py", "serializers.py", "exceptions.py", "middleware.py",
-    "cache.py", "scheduler.py", "db.py", "auth.py", "tests/test_validators.py",
-    "tests/test_auth.py", "tests/test_cache.py", "scripts/migrate.py",
-    "scripts/seed.py", "utils/helpers.py", "utils/decorators.py",
-    "Makefile", "docker/Dockerfile", "docker/docker-compose.yml",
-    ".github/workflows/ci.yml", ".github/workflows/release.yml",
+    "routes.py", "auth.py", "middleware.py", "cache.py", "scheduler.py",
+    "db.py", "serializers.py", "exceptions.py", "tests/test_routes.py",
+    "tests/test_auth.py", "tests/test_cache.py", "utils/helpers.py",
+    "utils/decorators.py", "scripts/migrate.py", "scripts/seed.py",
+    "scripts/setup.py", "services/monitoring.py", "docker/Dockerfile",
+    "docker/docker-compose.yml", ".github/workflows/ci.yml",
     "docs/api.md", "docs/contributing.md", "CHANGELOG.md",
 ]
+
+FILE_WEIGHTS = {
+    "app.py": 10,
+    "realai.py": 9,
+    "core.py": 7,
+    "pipeline.py": 6,
+    "models.py": 6,
+    "vector_store.py": 5,
+    "agent.py": 5,
+    "utils.py": 4,
+    "config.py": 3,
+    "constants.py": 2,
+    "services/openai_service.py": 4,
+    "services/data_service.py": 3,
+    "tests/test_agent.py": 3,
+    "tests/test_pipeline.py": 3,
+    "tests/test_models.py": 2,
+    "tests/conftest.py": 1,
+    "scripts/train.py": 2,
+    "scripts/serve.py": 2,
+    "README.md": 1,
+    "requirements.txt": 1,
+    "pyproject.toml": 1,
+    "docs/overview.md": 1,
+    "docs/usage.md": 1,
+}
+SIM_START_HOUR = 9
 
 def full_path(relative: str) -> str:
     return f"{BASE_DIR}/{relative}"
@@ -89,41 +117,84 @@ PAUSE_PROFILES = [
 ultra_break_cooldown_until = 0.0
 ultra_pro_break_cooldown_until = 0.0
 
-def pick_pause(simulated_elapsed_seconds: float) -> tuple[str, float]:
-    """Dynamically calculates pause profile weights based on ongoing cooldown targets."""
+def get_sim_daytime(simulated_elapsed_seconds: float) -> tuple[float, bool, bool]:
+    sim_hours = simulated_elapsed_seconds / 3600.0
+    hour = (SIM_START_HOUR + sim_hours) % 24
+    is_night = hour >= 22 or hour < 6
+    is_day = 8 <= hour < 18
+    return hour, is_day, is_night
+
+
+def pick_pause(state: "SessionState") -> tuple[str, float]:
+    """Dynamically calculates pause profile weights based on session momentum and time of day."""
     global ultra_break_cooldown_until, ultra_pro_break_cooldown_until
-    
+
+    simulated_elapsed_seconds = state.simulated_elapsed
+    _, is_day, is_night = get_sim_daytime(simulated_elapsed_seconds)
+    session_hours = simulated_elapsed_seconds / 3600.0
+    recent_breaks = state.recent_pause_labels[-8:]
+
+    long_session_factor = 1.0 + min(1.4, max(0.0, session_hours - 3.0) * 0.18)
+    focus_boost = 1.0
+    if sum(1 for lbl in recent_breaks if lbl in ("think_short", "think_medium")) >= 3:
+        focus_boost += 0.25
+    if sum(1 for lbl in recent_breaks if lbl in ("long_break", "ultra_break", "ultra_pro_break")) >= 2:
+        focus_boost += 0.35
+
     weights = []
     for profile in PAUSE_PROFILES:
         weight = profile["base_weight"]
         label = profile["label"]
-        
-        # Rule 1: If ultra break cooldown active, zero out ultra_break and ultra_pro_break
+
         if label in ("ultra_break", "ultra_pro_break") and simulated_elapsed_seconds < ultra_break_cooldown_until:
             weight = 0
-            
-        # Rule 2: If ultra pro break cooldown active, zero out ONLY ultra_pro_break
         if label == "ultra_pro_break" and simulated_elapsed_seconds < ultra_pro_break_cooldown_until:
             weight = 0
-            
-        weights.append(weight)
 
-    # Pick a profile based on modified dynamic weights
+        if label == "typing":
+            weight *= 1.0 + focus_boost * 0.2
+            if is_night:
+                weight *= 0.85
+            elif is_day:
+                weight *= 1.25
+        elif label == "think_short":
+            weight *= 1.0 + focus_boost * 0.2
+            if is_night:
+                weight *= 0.95
+        elif label == "think_medium":
+            weight *= 0.95
+        elif label == "long_break":
+            weight *= 1.0 + long_session_factor * 0.3
+            if is_night:
+                weight *= 1.35
+            elif is_day:
+                weight *= 0.85
+        elif label == "ultra_break":
+            weight *= 1.0 + long_session_factor * 0.45
+            if is_night:
+                weight *= 1.9
+            elif is_day:
+                weight *= 0.5
+        elif label == "ultra_pro_break":
+            weight *= 1.0 + long_session_factor * 0.6
+            if is_night:
+                weight *= 2.1
+            elif is_day:
+                weight *= 0.3
+
+        weights.append(max(weight, 0.0))
+
     chosen_profile = random.choices(PAUSE_PROFILES, weights=weights, k=1)[0]
     label = chosen_profile["label"]
     pause_secs = random.uniform(chosen_profile["min_s"], chosen_profile["max_s"])
-    
-    # Calculate target time when break finishes to set cooldown start line
-    break_end_sim_time = simulated_elapsed_seconds + pause_secs
 
-    # Trigger cooldowns if a long break was rolled
+    break_end_sim_time = simulated_elapsed_seconds + pause_secs
     if label == "ultra_break":
-        cooldown_duration = random.uniform(1 * 3600, 2 * 3600)  # 1-2 hours
+        cooldown_duration = random.uniform(1 * 3600, 2 * 3600)
         ultra_break_cooldown_until = break_end_sim_time + cooldown_duration
         logger.debug(f" [Cooldown] Ultra Break triggered. Locking Ultra/Ultra-Pro for next {cooldown_duration/3600:.2f} sim-hours.")
-        
     elif label == "ultra_pro_break":
-        cooldown_duration = random.uniform(2 * 3600, 6 * 3600)  # 2-6 hours
+        cooldown_duration = random.uniform(2 * 3600, 6 * 3600)
         ultra_pro_break_cooldown_until = break_end_sim_time + cooldown_duration
         logger.debug(f" [Cooldown] Ultra Pro Break triggered. Locking Ultra-Pro for next {cooldown_duration/3600:.2f} sim-hours.")
 
@@ -143,31 +214,33 @@ class CursorState:
 
     def move(self):
         self._steps_in_direction += 1
-        if self._steps_in_direction > random.randint(3, 15):
+        if self._steps_in_direction > random.randint(4, 18):
             self._direction *= -1
             self._steps_in_direction = 0
 
-        delta = random.randint(0, 10) * self._direction
         roll = random.random()
-        
-        if roll < 0.06:
+        if roll < 0.04:
+            delta = random.randint(-8, 8)
+        elif roll < 0.18:
+            delta = random.randint(-3, 6) * self._direction
+        elif roll < 0.38:
+            delta = random.randint(-10, 10)
+        else:
+            delta = random.randint(-2, 5)
+
+        if random.random() < 0.06:
             self.line = random.randint(1, max(1, self.total_lines))
             self._direction = random.choice([-1, 1])
-        elif roll < 0.12:
-            delta = -random.randint(1, 8)
-        elif roll < 0.18:
-            delta = -random.randint(10, 40)
-        elif roll < 0.22:
-            delta = random.randint(15, 50)
+        else:
+            self.line = max(1, min(self.total_lines, self.line + delta))
 
-        self.line = max(1, self.line + delta)
-        self.col  = random.randint(1, 120)
+        self.col = max(1, min(120, self.col + random.randint(-3, 6)))
 
-        if random.random() < 0.25:
-            self.total_lines += random.randint(0, 4)
+        if random.random() < 0.12:
+            self.total_lines = max(self.total_lines, self.line + random.randint(1, 3))
 
         if self.line > self.total_lines:
-            self.total_lines = self.line + random.randint(3, 15)
+            self.total_lines = self.line + random.randint(3, 10)
 
 # ---------------------------------------------------------------------------
 # Session state
@@ -177,19 +250,54 @@ class SessionState:
         self.active_files: list[str]  = list(SEED_FILES)
         self.new_file_pool: list[str] = list(NEW_FILE_POOL)
         self.deleted: set[str]        = set()
-        self.cursor: CursorState      = CursorState(random.choice(self.active_files))
-        self.heartbeats_sent          = 0
-        self.simulated_elapsed        = 0.0  # Tracked accumulated simulation runtime
+        self.previous_file: str | None = None
+        self.quick_return_file: str | None = None
+        self.recent_pause_labels: list[str] = []
+        self.cursor: CursorState = CursorState(self.weighted_choice(self.active_files))
+        self.heartbeats_sent = 0
+        self.simulated_elapsed = 0.0  # Tracked accumulated simulation runtime
+
+    def weighted_choice(self, choices: list[str]) -> str:
+        weights = [FILE_WEIGHTS.get(path, 1) for path in choices]
+        return random.choices(choices, weights=weights, k=1)[0]
 
     def current_file(self) -> str:
         return self.cursor.filepath
 
     def switch_file(self):
         choices = [f for f in self.active_files if f not in self.deleted and f != self.cursor.filepath]
-        if choices:
-            new_file = random.choice(choices)
-            self.cursor = CursorState(new_file)
-            logger.info(f" ↳ switched to  {new_file}")
+        if not choices:
+            return
+
+        self.previous_file = self.cursor.filepath
+        if self.previous_file in choices and random.random() < 0.35:
+            new_file = self.previous_file
+        else:
+            new_file = self.weighted_choice(choices)
+
+        self.cursor = CursorState(new_file)
+        logger.info(f" ↳ switched to  {new_file}")
+
+    def minor_switch(self) -> bool:
+        choices = [f for f in self.active_files if f not in self.deleted and f != self.cursor.filepath]
+        if not choices:
+            return False
+
+        self.previous_file = self.cursor.filepath
+        target = self.weighted_choice(choices)
+        self.quick_return_file = self.previous_file
+        self.cursor = CursorState(target)
+        logger.info(f" ↳ quick task     {target}")
+        return True
+
+    def return_from_quick_task(self) -> bool:
+        if self.quick_return_file and random.random() < 0.75:
+            return_path = self.quick_return_file
+            self.quick_return_file = None
+            self.cursor = CursorState(return_path)
+            logger.info(f" ↳ returned to   {return_path}")
+            return True
+        return False
 
     def create_file(self) -> str | None:
         available = [f for f in self.new_file_pool if f not in self.active_files]
@@ -211,6 +319,11 @@ class SessionState:
         self.active_files.remove(victim)
         logger.info(f" ✖ deleted       {victim}")
         return victim
+
+    def record_pause(self, label: str) -> None:
+        self.recent_pause_labels.append(label)
+        if len(self.recent_pause_labels) > 12:
+            self.recent_pause_labels.pop(0)
 
     def elapsed_str(self) -> str:
         s = int(self.simulated_elapsed)
@@ -251,30 +364,40 @@ def run(api_key: str, speed_factor: float = 1.0):
     try:
         while True:
             tick += 1
+            returned = state.return_from_quick_task()
             state.cursor.move()
             file_rel = state.current_file()
             file_abs = full_path(file_rel)
 
             roll = random.random()
-            is_write     = False
+            is_write = False
             action_label = "type"
 
-            if roll < 0.008:
+            if returned:
+                action_label = "return"
+            elif roll < 0.006:
                 created = state.create_file()
                 if created:
                     file_rel = created
                     file_abs = full_path(created)
                     is_write = True
                     action_label = "new-file"
-            elif roll < 0.015:
+            elif roll < 0.011:
                 state.delete_file()
+                file_rel = state.current_file()
+                file_abs = full_path(file_rel)
                 action_label = "post-delete"
-            elif roll < 0.07:
+            elif roll < 0.028:
+                if state.minor_switch():
+                    file_rel = state.current_file()
+                    file_abs = full_path(file_rel)
+                    action_label = "quick"
+            elif roll < 0.050:
                 state.switch_file()
                 file_rel = state.current_file()
                 file_abs = full_path(file_rel)
                 action_label = "switch"
-            elif roll < 0.22:
+            elif roll < 0.18:
                 is_write = True
                 action_label = "save"
 
@@ -299,8 +422,9 @@ def run(api_key: str, speed_factor: float = 1.0):
             if is_write or state.heartbeats_sent % 10 == 0:
                 client.flush()
 
-            # Pass simulated elapsed tracker into pick_pause
-            pause_label, pause_secs = pick_pause(state.simulated_elapsed)
+            # Pick a pause based on session state and time of day
+            pause_label, pause_secs = pick_pause(state)
+            state.record_pause(pause_label)
             scaled = pause_secs * speed_factor
 
             if pause_label != "typing":
@@ -321,5 +445,5 @@ if __name__ == "__main__":
     if not api_key:
         api_key = input("Enter your Hackatime API key: ").strip()
 
-    speed = float(sys.argv[1]) if len(sys.argv) > 1 else 0.05
+    speed = float(sys.argv[1]) if len(sys.argv) > 1 else 0.2
     run(api_key, speed_factor=speed)
